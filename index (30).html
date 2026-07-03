@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Crypto Macro Sentiment Terminal (24H Fixed)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .crypto-glow { box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.15); }
+        .bg-glass { background-color: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); }
+        .draggable-item { cursor: grab; }
+        .draggable-item.dragging { cursor: grabbing; opacity: 0.5; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(30, 41, 59, 0.6); }
+        .sort-btn { transition: all 0.2s ease; }
+        .sort-btn.active { background-color: rgba(16, 185, 129, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen p-4 md:p-8 selection:bg-emerald-500 selection:text-slate-950">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- TOP HEADER & REFRESH BAR -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/50 p-6 rounded-2xl border border-slate-800 bg-glass">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                    Alpha Terminal: Macro Sentiment
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Institutional Orderflow Tracker (24-Hour Lookback)</p>
+            </div>
+            <div class="flex items-center gap-3 bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-800/80">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span id="status-pulse" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span id="status-indicator" class="text-xs font-mono font-medium text-slate-400">Syncing Engine...</span>
+                <span class="text-slate-600 text-xs">|</span>
+                <span id="last-updated" class="text-xs font-mono text-slate-500">--:--:--</span>
+                <span class="text-slate-600 text-xs">|</span>
+                <button id="settings-btn" class="text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors">⚙️ Settings</button>
+            </div>
+        </header>
+
+        <!-- SETTINGS MODAL -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl w-full max-h-96 overflow-y-auto shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-slate-100">Column Settings</h2>
+                    <button id="close-settings" class="text-slate-400 hover:text-slate-200 text-2xl">&times;</button>
+                </div>
+
+                <div class="space-y-4 mb-6">
+                    <p class="text-xs text-slate-400 font-mono">Drag to reorder • Toggle visibility</p>
+                    <div id="column-list" class="space-y-2 bg-slate-950 p-4 rounded-lg border border-slate-800">
+                        <!-- Columns will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <div class="flex gap-3 justify-end">
+                    <button id="reset-columns" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium transition-colors">Reset to Default</button>
+                    <button id="close-settings-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SENTIMENT MACRO CARDS -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top-40 Aggregate OI (24H)</span>
+                <div id="macro-oi" class="text-2xl font-bold mt-2 text-cyan-400">$0.00</div>
+                <div class="text-slate-500 text-xs mt-2 font-medium">Total active derivatives exposure</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Funding Rate (24h)</span>
+                <div id="macro-funding" class="text-2xl font-bold mt-2 text-slate-300">0.0000%</div>
+                <div class="text-slate-500 text-xs mt-2 font-medium">Premium vs Discount pool bias</div>
+            </div>
+        </section>
+
+        <!-- UTILITIES BAR (SEARCH & FILTER) -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/60">
+            <div class="relative w-full sm:w-72">
+                <input type="text" id="search-input" placeholder="Filter symbol or search any crypto..." 
+                       class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors">
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="sort-by-oi" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors" title="Sort by Open Interest">📊 Sort by OI</button>
+                <button id="sort-by-price" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors" title="Sort by Price Change">📈 Sort by Price</button>
+                <button id="sort-by-funding" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors" title="Sort by Funding Rate">💰 Sort by Funding</button>
+            </div>
+        </div>
+
+        <!-- DATATABLE INTERFACE -->
+        <div class="overflow-x-auto bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl crypto-glow">
+            <table class="min-w-full">
+                <thead id="table-header" class="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                    <!-- Headers will be dynamically generated -->
+                </thead>
+                <tbody id="crypto-table-body" class="divide-y divide-slate-800/60 font-medium text-sm">
+                    <tr>
+                        <td class="px-6 py-12 text-center text-slate-500 font-mono">
+                            Querying Binance Historical Archive...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+    </div>
+
+    <script>
+        let currentRowsData = [];
+        let allCryptoCache = [];
+        let currentSortType = null;
+        let sortAscending = false;
+        const REFRESH_INTERVAL_MS = 60000;
+
+        // Default column configuration
+        const DEFAULT_COLUMNS = [
+            { id: 'rank', label: 'Rank', visible: true },
+            { id: 'symbol', label: 'Asset', visible: true },
+            { id: 'price', label: 'Price (vs 24H Ago)', visible: true },
+            { id: 'funding', label: 'Funding Rate', visible: true },
+            { id: 'session', label: 'Session', visible: true },
+            { id: 'oi', label: 'Open Interest (vs 24H Ago)', visible: true },
+            { id: 'volume', label: '24h Volume', visible: true }
+        ];
+
+        let columnConfig = loadColumnConfig();
+
+        function loadColumnConfig() {
+            const saved = localStorage.getItem('columnConfig');
+            return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+        }
+
+        function saveColumnConfig() {
+            localStorage.setItem('columnConfig', JSON.stringify(columnConfig));
+        }
+
+        function initializeSettings() {
+            const settingsBtn = document.getElementById('settings-btn');
+            const modal = document.getElementById('settings-modal');
+            const closeBtn = document.getElementById('close-settings');
+            const closeBtnMain = document.getElementById('close-settings-btn');
+            const resetBtn = document.getElementById('reset-columns');
+
+            settingsBtn.addEventListener('click', () => {
+                modal.classList.remove('hidden');
+                renderColumnSettings();
+            });
+
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            closeBtnMain.addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.add('hidden');
+            });
+
+            resetBtn.addEventListener('click', () => {
+                columnConfig = JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+                saveColumnConfig();
+                renderColumnSettings();
+                renderTableDOM();
+            });
+        }
+
+        function initializeSortButtons() {
+            const oiBtn = document.getElementById('sort-by-oi');
+            const priceBtn = document.getElementById('sort-by-price');
+            const fundingBtn = document.getElementById('sort-by-funding');
+
+            oiBtn.addEventListener('click', () => {
+                if (currentSortType === 'oi') {
+                    sortAscending = !sortAscending;
+                } else {
+                    currentSortType = 'oi';
+                    sortAscending = false;
+                }
+                updateSortButtonStates();
+                renderTableDOM();
+            });
+
+            priceBtn.addEventListener('click', () => {
+                if (currentSortType === 'price') {
+                    sortAscending = !sortAscending;
+                } else {
+                    currentSortType = 'price';
+                    sortAscending = false;
+                }
+                updateSortButtonStates();
+                renderTableDOM();
+            });
+
+            fundingBtn.addEventListener('click', () => {
+                if (currentSortType === 'funding') {
+                    sortAscending = !sortAscending;
+                } else {
+                    currentSortType = 'funding';
+                    sortAscending = false;
+                }
+                updateSortButtonStates();
+                renderTableDOM();
+            });
+        }
+
+        function updateSortButtonStates() {
+            document.getElementById('sort-by-oi').classList.remove('active');
+            document.getElementById('sort-by-price').classList.remove('active');
+            document.getElementById('sort-by-funding').classList.remove('active');
+
+            if (currentSortType === 'oi') {
+                document.getElementById('sort-by-oi').classList.add('active');
+                document.getElementById('sort-by-oi').textContent = `📊 Sort by OI ${sortAscending ? '↑' : '↓'}`;
+            } else if (currentSortType === 'price') {
+                document.getElementById('sort-by-price').classList.add('active');
+                document.getElementById('sort-by-price').textContent = `📈 Sort by Price ${sortAscending ? '↑' : '↓'}`;
+            } else if (currentSortType === 'funding') {
+                document.getElementById('sort-by-funding').classList.add('active');
+                document.getElementById('sort-by-funding').textContent = `💰 Sort by Funding ${sortAscending ? '↑' : '↓'}`;
+            }
+        }
+
+        function renderColumnSettings() {
+            const columnList = document.getElementById('column-list');
+            columnList.innerHTML = '';
+
+            columnConfig.forEach((col, index) => {
+                const div = document.createElement('div');
+                div.className = 'draggable-item flex items-center gap-3 p-3 bg-slate-900 border border-slate-700 rounded-lg hover:border-slate-600 transition-colors';
+                div.draggable = true;
+                div.dataset.index = index;
+
+                div.innerHTML = `
+                    <span class="text-slate-500 cursor-grab active:cursor-grabbing">⋮⋮</span>
+                    <label class="flex items-center gap-2 flex-1 cursor-pointer">
+                        <input type="checkbox" class="column-toggle w-4 h-4 rounded border-slate-600" ${col.visible ? 'checked' : ''} data-id="${col.id}">
+                        <span class="text-sm text-slate-200">${col.label}</span>
+                    </label>
+                `;
+
+                div.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    div.classList.add('dragging');
+                });
+
+                div.addEventListener('dragend', () => div.classList.remove('dragging'));
+                div.addEventListener('dragover', (e) => e.preventDefault());
+                div.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const sourceDiv = document.querySelector('.draggable-item.dragging');
+                    if (sourceDiv && sourceDiv !== div) {
+                        const srcIndex = parseInt(sourceDiv.dataset.index);
+                        const tgtIndex = parseInt(div.dataset.index);
+                        [columnConfig[srcIndex], columnConfig[tgtIndex]] = [columnConfig[tgtIndex], columnConfig[srcIndex]];
+                        saveColumnConfig();
+                        renderColumnSettings();
+                        renderTableDOM();
+                    }
+                });
+
+                columnList.appendChild(div);
+            });
+
+            document.querySelectorAll('.column-toggle').forEach(toggle => {
+                toggle.addEventListener('change', (e) => {
+                    const colId = e.target.dataset.id;
+                    const col = columnConfig.find(c => c.id === colId);
+                    if (col) {
+                        col.visible = e.target.checked;
+                        saveColumnConfig();
+                        renderTableDOM();
+                    }
+                });
+            });
+        }
+
+        function renderTableHeaders() {
+            const thead = document.getElementById('table-header');
+            thead.innerHTML = '';
+            const tr = document.createElement('tr');
+
+            columnConfig.filter(col => col.visible).forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'px-6 py-4 text-center font-semibold text-slate-300';
+                th.textContent = col.label;
+                tr.appendChild(th);
+            });
+
+            thead.appendChild(tr);
+        }
+
+        const formatNumber = (num) => {
+            return new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 2 }).format(num);
+        };
+
+        document.getElementById('search-input').addEventListener('input', renderTableDOM);
+
+        async function searchCryptoBinance(symbol) {
+            try {
+                const res = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol.toUpperCase()}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch (err) {
+                console.error(`Error searching ${symbol}:`, err);
+                return null;
+            }
+        }
+
+        async function fetchCryptoDetails(ticker, index) {
+            const symbol = ticker.symbol;
+            try {
+                const [premiumIndexRes, oiLiveRes] = await Promise.all([
+                    fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`),
+                    fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`)
+                ]);
+
+                const premiumData = await premiumIndexRes.json();
+                const oiLiveData = await oiLiveRes.json();
+
+                const currentPrice = parseFloat(ticker.lastPrice);
+                const changePercent = parseFloat(ticker.priceChangePercent);
+                const fundingRate = parseFloat(premiumData.lastFundingRate) * 100;
+                const currentOIContracts = parseFloat(oiLiveData.openInterest);
+                const currentOiUSDT = currentOIContracts * currentPrice;
+                const volumeUSDT = parseFloat(ticker.quoteVolume);
+
+                let historicalPriceBaseline = currentPrice;
+                let historicalOiBaseline = currentOiUSDT;
+                
+                try {
+                    const [oiHistRes, klineRes] = await Promise.all([
+                        fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=4h&limit=6`),
+                        fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=2`)
+                    ]);
+
+                    const oiHistData = await oiHistRes.json();
+                    const klineData = await klineRes.json();
+
+                    // Get 24h baseline from kline
+                    if (klineData && klineData.length > 0) {
+                        historicalPriceBaseline = parseFloat(klineData[0][1]); // Open price of 1 day ago
+                    }
+                    // Get 24h OI baseline from history
+                    if (oiHistData && oiHistData.length > 0) {
+                        historicalOiBaseline = parseFloat(oiHistData[0].sumOpenInterestValue || (parseFloat(oiHistData[0].sumOpenInterest) * historicalPriceBaseline));
+                    }
+                } catch (histErr) {
+                    console.warn(`History fetch skipped for ${symbol}`);
+                }
+
+                const pctPriceChange = ((currentPrice - historicalPriceBaseline) / historicalPriceBaseline) * 100;
+                const pctOiChange = ((currentOiUSDT - historicalOiBaseline) / historicalOiBaseline) * 100;
+
+                let priceTrendIndicator = "";
+                let oiTrendIndicator = "";
+                if (pctPriceChange > 0.05) priceTrendIndicator = `<span class="text-emerald-400 font-bold ml-1 text-xs">▲</span>`;
+                else if (pctPriceChange < -0.05) priceTrendIndicator = `<span class="text-rose-500 font-bold ml-1 text-xs">▼</span>`;
+                if (pctOiChange > 0.05) oiTrendIndicator = `<span class="text-emerald-400 font-bold ml-1 text-xs">▲</span>`;
+                else if (pctOiChange < -0.05) oiTrendIndicator = `<span class="text-rose-500 font-bold ml-1 text-xs">▼</span>`;
+
+                return {
+                    rank: index + 1,
+                    symbol,
+                    currentPrice,
+                    changePercent: pctPriceChange,
+                    fundingRate,
+                    fundingSessionText: `${8}h`,
+                    oiInUSDT: currentOiUSDT,
+                    oiTrendIndicator,
+                    priceTrendIndicator,
+                    volumeUSDT,
+                    pctOiChange
+                };
+            } catch (err) {
+                console.error(`Error processing ${symbol}:`, err);
+                return null;
+            }
+        }
+
+        async function updateTerminalEngine() {
+            const status = document.getElementById('status-indicator');
+            const pulse = document.getElementById('status-pulse');
+            
+            status.innerText = "Extracting Top-40 Gainers (24H)...";
+            pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-yellow-500";
+
+            try {
+                const globalTickerRes = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr');
+                const allTickers = await globalTickerRes.json();
+
+                const topGainers = allTickers
+                    .filter(t => t.symbol.endsWith('USDT') && !t.symbol.includes('_'))
+                    .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent))
+                    .slice(0, 40);
+
+                const detailedDataPromises = topGainers.map((ticker, index) => fetchCryptoDetails(ticker, index));
+                currentRowsData = (await Promise.all(detailedDataPromises)).filter(r => r !== null);
+                allCryptoCache = [...currentRowsData];
+                
+                calculateMacroMetrics(currentRowsData);
+                renderTableDOM();
+
+                status.innerText = "Macro Feed Active";
+                pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+                document.getElementById('last-updated').innerText = new Date().toLocaleTimeString();
+
+            } catch (error) {
+                console.error('Error:', error);
+                status.innerText = "Archive Sync Error";
+                pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-rose-500";
+            }
+        }
+
+        function calculateMacroMetrics(data) {
+            if(!data.length) return;
+            
+            const totalOi = data.reduce((acc, current) => acc + current.oiInUSDT, 0);
+            document.getElementById('macro-oi').innerText = `$${formatNumber(totalOi)}`;
+
+            const avgFunding = data.reduce((acc, current) => acc + current.fundingRate, 0) / data.length;
+            const fCard = document.getElementById('macro-funding');
+            fCard.innerText = `${avgFunding.toFixed(4)}%`;
+            fCard.className = `text-2xl font-bold mt-2 ${avgFunding > 0 ? 'text-rose-400' : 'text-emerald-400'}`;
+        }
+
+        function sortData(data) {
+            if (!currentSortType) return data;
+
+            const sorted = [...data];
+            sorted.sort((a, b) => {
+                let comparison = 0;
+
+                if (currentSortType === 'oi') {
+                    comparison = a.pctOiChange - b.pctOiChange;
+                } else if (currentSortType === 'price') {
+                    comparison = a.changePercent - b.changePercent;
+                } else if (currentSortType === 'funding') {
+                    comparison = a.fundingRate - b.fundingRate;
+                }
+
+                return sortAscending ? comparison : -comparison;
+            });
+
+            return sorted;
+        }
+
+        async function renderTableDOM() {
+            renderTableHeaders();
+            const tbody = document.getElementById('crypto-table-body');
+            const searchQuery = document.getElementById('search-input').value.trim().toUpperCase();
+            
+            let displayData = currentRowsData;
+
+            if (searchQuery) {
+                displayData = currentRowsData.filter(item => item.symbol.includes(searchQuery));
+                
+                if (displayData.length === 0) {
+                    const ticker = await searchCryptoBinance(searchQuery + 'USDT');
+                    if (ticker) {
+                        const details = await fetchCryptoDetails(ticker, 1);
+                        if (details) {
+                            displayData = [details];
+                        }
+                    }
+                }
+            }
+
+            // Apply sorting
+            displayData = sortData(displayData);
+            
+            if(!displayData.length) {
+                tbody.innerHTML = `<tr><td class="px-6 py-8 text-center text-slate-500 font-mono text-xs">No active pairs match criteria</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = "";
+            displayData.forEach((data, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/30 transition-colors";
+                
+                let rankBadge = `<span class="font-bold text-slate-500 font-mono">${data.rank}</span>`;
+                if (data.rank === 1) rankBadge = `<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-xs shadow">🥇 1</span>`;
+                if (data.rank === 2) rankBadge = `<span class="px-2 py-0.5 rounded bg-slate-300 text-slate-950 font-black text-xs shadow">🥈 2</span>`;
+                if (data.rank === 3) rankBadge = `<span class="px-2 py-0.5 rounded bg-amber-700 text-white font-black text-xs shadow">🥉 3</span>`;
+
+                const visibleColumns = columnConfig.filter(col => col.visible);
+
+                visibleColumns.forEach(col => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 text-center';
+
+                    switch(col.id) {
+                        case 'rank':
+                            td.innerHTML = rankBadge;
+                            break;
+                        case 'symbol':
+                            td.className = 'px-6 py-4 font-bold text-slate-100 tracking-wide text-left';
+                            td.textContent = data.symbol;
+                            break;
+                        case 'price':
+                            td.className = 'px-6 py-4 text-left';
+                            td.innerHTML = `
+                                <div class="font-mono text-slate-200 flex items-center">
+                                    $${data.currentPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                    ${data.priceTrendIndicator}
+                                </div>
+                                <div class="text-xs text-emerald-400 font-bold tracking-tight">▲ +${data.changePercent.toFixed(2)}%</div>
+                            `;
+                            break;
+                        case 'funding':
+                            td.className = `px-6 py-4 font-mono font-semibold ${data.fundingRate > 0 ? 'text-rose-400' : 'text-emerald-400'}`;
+                            td.textContent = `${data.fundingRate > 0 ? '+' : ''}${data.fundingRate.toFixed(4)}%`;
+                            break;
+                        case 'session':
+                            td.className = 'px-6 py-4 text-slate-400 font-mono text-xs';
+                            td.textContent = data.fundingSessionText;
+                            break;
+                        case 'oi':
+                            td.className = 'px-6 py-4 font-mono text-slate-200';
+                            td.innerHTML = `
+                                <div class="flex items-center justify-center flex-col">
+                                    $${formatNumber(data.oiInUSDT)}
+                                    ${data.oiTrendIndicator}
+                                    <div class="text-xs text-slate-400 mt-1">${data.pctOiChange > 0 ? '+' : ''}${data.pctOiChange.toFixed(2)}%</div>
+                                </div>
+                            `;
+                            break;
+                        case 'volume':
+                            td.className = 'px-6 py-4 font-mono text-slate-400';
+                            td.textContent = `$${formatNumber(data.volumeUSDT)}`;
+                            break;
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        initializeSettings();
+        initializeSortButtons();
+        updateTerminalEngine();
+        setInterval(updateTerminalEngine, REFRESH_INTERVAL_MS);
+    </script>
+</body>
+</html>
