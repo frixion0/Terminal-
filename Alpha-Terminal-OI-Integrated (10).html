@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Crypto Macro Sentiment Terminal (24H Fixed)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    <style>
+        .crypto-glow { box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.15); }
+        .bg-glass { background-color: rgba(31, 41, 55, 0.7); backdrop-filter: blur(10px); }
+        .draggable-item { cursor: grab; }
+        .draggable-item.dragging { cursor: grabbing; opacity: 0.5; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(30, 41, 59, 0.6); }
+        .sort-btn { transition: all 0.2s ease; }
+        .sort-btn.active { background-color: rgba(16, 185, 129, 0.3); }
+
+        .mini-chart-wrap {
+            width: 130px; height: 36px; cursor: pointer; border-radius: 6px; transition: all 0.2s ease;
+        }
+        .mini-chart-wrap:hover { background: rgba(255,255,255,0.04); transform: scale(1.08); }
+        .mini-tf-btn {
+            padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: all 0.15s; border: 1px solid #1e293b; background: #0f172a; color: #94a3b8;
+        }
+        .mini-tf-btn:hover { border-color: #10b981; color: #10b981; }
+        .mini-tf-btn.active { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
+
+        .oi-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
+            z-index: 100; display: none; align-items: stretch; justify-content: stretch;
+        }
+        .oi-modal-overlay.show { display: flex; }
+        .oi-modal-box {
+            background: #0f172a; border: 1px solid #1e293b; width: 100%; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+        .oi-modal-top { flex-shrink: 0; }
+        .oi-modal-chart-area { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 20px 20px 20px; }
+        .oi-stat-card { background: rgba(240,185,11,0.05); border: 1px solid rgba(240,185,11,0.15); padding: 10px 14px; border-radius: 8px; }
+        .oi-stat-label { font-size: 10px; color: #848e9c; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px; }
+        .oi-stat-value { font-size: 15px; font-weight: 700; color: #f0b90b; font-family: ui-monospace, monospace; }
+        .oi-detail-chart-wrap { position: relative; flex: 1; min-height: 300px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; }
+        .oi-loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #848e9c; text-align: center; background: rgba(15,23,42,0.9); padding: 20px 30px; border-radius: 8px; z-index: 10; font-size: 14px; }
+        .oi-tf-btn {
+            padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+            transition: all 0.15s; border: 1px solid #1e293b; background: #0f172a; color: #94a3b8;
+        }
+        .oi-tf-btn:hover { border-color: #f0b90b; color: #f0b90b; }
+        .oi-tf-btn.active { background: rgba(240,185,11,0.15); border-color: #f0b90b; color: #f0b90b; }
+
+        .zoom-toolbar {
+            display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+            background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid #1e293b; flex-shrink: 0;
+        }
+        .zoom-btn {
+            display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+            border-radius: 6px; border: 1px solid #1e293b; background: #0f172a;
+            color: #94a3b8; font-size: 16px; cursor: pointer; transition: all 0.15s; user-select: none;
+        }
+        .zoom-btn:hover { border-color: #10b981; color: #10b981; }
+        .zoom-btn.active { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
+        .zoom-sep { width: 1px; height: 20px; background: #1e293b; flex-shrink: 0; }
+        .zoom-hint { font-size: 10px; color: #64748b; margin-left: auto; font-family: ui-monospace, monospace; white-space: nowrap; }
+        .zoom-hint kbd { background: #1e293b; padding: 1px 5px; border-radius: 3px; font-size: 10px; color: #94a3b8; }
+
+        /* Color picker row */
+        .color-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+        .color-row label { font-size: 12px; color: #94a3b8; min-width: 160px; }
+        .color-row input[type="color"] {
+            width: 36px; height: 28px; border: 1px solid #334155; border-radius: 6px;
+            background: transparent; cursor: pointer; padding: 2px;
+        }
+        .color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-row input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+        .color-row .color-hex { font-size: 11px; color: #64748b; font-family: ui-monospace, monospace; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen p-4 md:p-8 selection:bg-emerald-500 selection:text-slate-950">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- TOP HEADER -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/50 p-6 rounded-2xl border border-slate-800 bg-glass">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                    Alpha Terminal: Macro Sentiment
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Institutional Orderflow Tracker (24-Hour Lookback) &middot; Click mini chart for OI detail</p>
+            </div>
+            <div class="flex items-center gap-3 bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-800/80">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span id="status-pulse" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span id="status-indicator" class="text-xs font-mono font-medium text-slate-400">Syncing Engine...</span>
+                <span class="text-slate-600 text-xs">|</span>
+                <span id="last-updated" class="text-xs font-mono text-slate-500">--:--:--</span>
+                <span class="text-slate-600 text-xs">|</span>
+                <button id="settings-btn" class="text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors">⚙️ Settings</button>
+            </div>
+        </header>
+
+        <!-- SETTINGS MODAL -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-slate-100">Settings</h2>
+                    <button id="close-settings" class="text-slate-400 hover:text-slate-200 text-2xl">&times;</button>
+                </div>
+
+                <!-- Mini Chart Timeframe -->
+                <div class="mb-6 p-4 bg-slate-950 rounded-lg border border-slate-800">
+                    <p class="text-xs text-slate-400 font-mono mb-3">Mini Chart Timeframe (applies to both OI & Volume)</p>
+                    <div class="flex flex-wrap gap-2" id="mini-tf-selector">
+                        <button class="mini-tf-btn" data-mtf="5m">5m</button>
+                        <button class="mini-tf-btn" data-mtf="15m">15m</button>
+                        <button class="mini-tf-btn" data-mtf="30m">30m</button>
+                        <button class="mini-tf-btn" data-mtf="1h">1h</button>
+                        <button class="mini-tf-btn" data-mtf="4h">4h</button>
+                        <button class="mini-tf-btn active" data-mtf="1d">1d</button>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2">Changes apply on next data refresh.</p>
+                </div>
+
+                <!-- Color Customization -->
+                <div class="mb-6 p-4 bg-slate-950 rounded-lg border border-slate-800">
+                    <p class="text-xs text-slate-400 font-mono mb-3">Mini Chart Colors</p>
+                    <div id="color-settings-container"></div>
+                    <p class="text-xs text-slate-500 mt-3">Changes apply instantly to visible charts.</p>
+                </div>
+
+                <!-- Column Settings -->
+                <div class="space-y-4 mb-6">
+                    <p class="text-xs text-slate-400 font-mono">Drag to reorder &middot; Toggle visibility</p>
+                    <div id="column-list" class="space-y-2 bg-slate-950 p-4 rounded-lg border border-slate-800"></div>
+                </div>
+                <div class="flex gap-3 justify-end">
+                    <button id="reset-columns" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium transition-colors">Reset All</button>
+                    <button id="close-settings-btn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">Done</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OI DETAIL MODAL (fullscreen with zoom) -->
+        <div id="oi-detail-modal" class="oi-modal-overlay">
+            <div class="oi-modal-box">
+                <div class="oi-modal-top">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-5 pb-3 border-b border-slate-800">
+                        <div>
+                            <h2 id="oi-modal-title" class="text-xl font-bold text-slate-100">BTCUSDT — Open Interest & Notional Value</h2>
+                            <p class="text-xs text-slate-500 mt-1">Binance Futures historical OI data</p>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button class="oi-tf-btn active" data-tf="5m">5m</button>
+                            <button class="oi-tf-btn" data-tf="15m">15m</button>
+                            <button class="oi-tf-btn" data-tf="30m">30m</button>
+                            <button class="oi-tf-btn" data-tf="1h">1h</button>
+                            <button class="oi-tf-btn" data-tf="4h">4h</button>
+                            <button class="oi-tf-btn" data-tf="1d">1d</button>
+                            <button id="close-oi-modal" class="ml-2 text-slate-400 hover:text-white text-2xl leading-none" title="Close">&times;</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 px-5 py-3">
+                        <div class="oi-stat-card"><div class="oi-stat-label">Symbol</div><div class="oi-stat-value" id="oi-s-symbol">—</div></div>
+                        <div class="oi-stat-card"><div class="oi-stat-label">Current OI</div><div class="oi-stat-value" id="oi-s-current-oi">—</div></div>
+                        <div class="oi-stat-card"><div class="oi-stat-label">Current Notional</div><div class="oi-stat-value" id="oi-s-notional">—</div></div>
+                        <div class="oi-stat-card"><div class="oi-stat-label">Avg OI (Period)</div><div class="oi-stat-value" id="oi-s-avg-oi">—</div></div>
+                        <div class="oi-stat-card"><div class="oi-stat-label">Max OI (Period)</div><div class="oi-stat-value" id="oi-s-max-oi">—</div></div>
+                    </div>
+                </div>
+                <div class="oi-modal-chart-area">
+                    <div class="zoom-toolbar mb-3">
+                        <button class="zoom-btn" id="zoom-in-btn" title="Zoom In">+</button>
+                        <button class="zoom-btn" id="zoom-out-btn" title="Zoom Out">−</button>
+                        <button class="zoom-btn" id="zoom-reset-btn" title="Reset Zoom">↺</button>
+                        <div class="zoom-sep"></div>
+                        <button class="zoom-btn" id="zoom-pan-btn" title="Toggle Pan Mode">✥</button>
+                        <div class="zoom-sep"></div>
+                        <button class="zoom-btn" id="zoom-y-fit" title="Fit Y to visible X">⤒</button>
+                        <span class="zoom-hint">Scroll to zoom &middot; <kbd>Shift</kbd>+drag to pan &middot; Pinch on touch</span>
+                    </div>
+                    <div class="oi-detail-chart-wrap">
+                        <div id="oi-chart-loading" class="oi-loading">Fetching OI data...</div>
+                        <canvas id="oiDetailChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SENTIMENT MACRO CARDS -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Top-40 Aggregate OI (24H)</span>
+                <div id="macro-oi" class="text-2xl font-bold mt-2 text-cyan-400">$0.00</div>
+                <div class="text-slate-500 text-xs mt-2 font-medium">Total active derivatives exposure</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between shadow-lg">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Avg Funding Rate (24h)</span>
+                <div id="macro-funding" class="text-2xl font-bold mt-2 text-slate-300">0.0000%</div>
+                <div class="text-slate-500 text-xs mt-2 font-medium">Premium vs Discount pool bias</div>
+            </div>
+        </section>
+
+        <!-- UTILITIES BAR -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-900/30 p-4 rounded-xl border border-slate-800/60">
+            <div class="relative w-full sm:w-72">
+                <input type="text" id="search-input" placeholder="Filter symbol or search any crypto..."
+                       class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors">
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="sort-by-oi" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors">📊 Sort by OI</button>
+                <button id="sort-by-price" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors">📈 Sort by Price</button>
+                <button id="sort-by-funding" class="sort-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono transition-colors">💰 Sort by Funding</button>
+            </div>
+        </div>
+
+        <!-- DATATABLE -->
+        <div class="overflow-x-auto bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl crypto-glow">
+            <table class="min-w-full">
+                <thead id="table-header" class="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-xs font-semibold uppercase tracking-wider"></thead>
+                <tbody id="crypto-table-body" class="divide-y divide-slate-800/60 font-medium text-sm">
+                    <tr><td class="px-6 py-12 text-center text-slate-500 font-mono">Querying Binance Historical Archive...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        /* =========================================================
+           CORE STATE
+        ========================================================= */
+        let currentRowsData = [];
+        let allCryptoCache = [];
+        let currentSortType = null;
+        let sortAscending = false;
+        const REFRESH_INTERVAL_MS = 60000;
+
+        /* =========================================================
+           COLOR CONFIG (persisted)
+        ========================================================= */
+        const DEFAULT_COLORS = {
+            oiArea:     '#f0b90b',  // OI area (contracts) — Binance primary
+            oiLine:     '#ffffff',  // Notional USD overlay line
+            volGreen:   '#22c55e',  // Bullish bars (Volume)
+            volRed:     '#ef4444',  // Bearish bars (Volume)
+            volAvgLine: '#facc15'   // Volume average line
+        };
+
+        const COLOR_LABELS = {
+            oiArea:     'OI Area Color (Contracts)',
+            oiLine:     'OI Notional Line (USD)',
+            volGreen:   'Volume Bars (Bullish / Green)',
+            volRed:     'Volume Bars (Bearish / Red)',
+            volAvgLine: 'Volume Average Line'
+        };
+
+        let chartColors = loadColorConfig();
+
+        function loadColorConfig() {
+            try {
+                const saved = localStorage.getItem('chartColors_v3');
+                return saved ? { ...DEFAULT_COLORS, ...JSON.parse(saved) } : { ...DEFAULT_COLORS };
+            } catch { return { ...DEFAULT_COLORS }; }
+        }
+
+        function saveColorConfig() {
+            localStorage.setItem('chartColors_v3', JSON.stringify(chartColors));
+        }
+
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1,3),16);
+            const g = parseInt(hex.slice(3,5),16);
+            const b = parseInt(hex.slice(5,7),16);
+            return `rgba(${r},${g},${b},${alpha})`;
+        }
+
+        function renderColorSettings() {
+            const container = document.getElementById('color-settings-container');
+            container.innerHTML = '';
+            Object.keys(DEFAULT_COLORS).forEach(key => {
+                const row = document.createElement('div');
+                row.className = 'color-row';
+                row.innerHTML = `
+                    <label>${COLOR_LABELS[key]}</label>
+                    <input type="color" id="clr-${key}" value="${chartColors[key]}">
+                    <span class="color-hex" id="clr-hex-${key}">${chartColors[key]}</span>`;
+                container.appendChild(row);
+
+                row.querySelector(`#clr-${key}`).addEventListener('input', function() {
+                    chartColors[key] = this.value;
+                    document.getElementById(`clr-hex-${key}`).textContent = this.value;
+                    saveColorConfig();
+                    renderTableDOM(); // live redraw
+                });
+            });
+        }
+
+        /* =========================================================
+           MINI CHART TIMEFRAME (persisted)
+        ========================================================= */
+        let miniChartTimeframe = localStorage.getItem('miniChartTf') || '1d';
+
+        // Map mini-chart TF to Binance kline interval
+        function miniTfToKlineInterval(tf) {
+            const map = { '5m':'5m', '15m':'15m', '30m':'30m', '1h':'1h', '4h':'4h', '1d':'1d' };
+            return map[tf] || '1d';
+        }
+
+        function initMiniTfSelector() {
+            document.querySelectorAll('#mini-tf-selector .mini-tf-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mtf === miniChartTimeframe);
+                b.addEventListener('click', () => {
+                    miniChartTimeframe = b.dataset.mtf;
+                    localStorage.setItem('miniChartTf', miniChartTimeframe);
+                    document.querySelectorAll('#mini-tf-selector .mini-tf-btn').forEach(x => x.classList.remove('active'));
+                    b.classList.add('active');
+                    updateTerminalEngine();
+                });
+            });
+        }
+
+        /* =========================================================
+           COLUMN CONFIG
+        ========================================================= */
+        const DEFAULT_COLUMNS = [
+            { id: 'rank', label: 'Rank', visible: true },
+            { id: 'symbol', label: 'Asset', visible: true },
+            { id: 'price', label: 'Price (vs 24H Ago)', visible: true },
+            { id: 'funding', label: 'Funding Rate', visible: true },
+            { id: 'session', label: 'Session', visible: true },
+            { id: 'oi', label: 'Open Interest (vs 24H Ago)', visible: true },
+            { id: 'oi_sparkline', label: 'OI Trend', visible: true },
+            { id: 'vol_sparkline', label: 'Volume Trend', visible: true },
+            { id: 'volume', label: '24h Volume', visible: true }
+        ];
+
+        let columnConfig = loadColumnConfig();
+
+        function loadColumnConfig() {
+            const saved = localStorage.getItem('columnConfig_v3');
+            return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+        }
+        function saveColumnConfig() {
+            localStorage.setItem('columnConfig_v3', JSON.stringify(columnConfig));
+        }
+
+        /* =========================================================
+           SETTINGS MODAL
+        ========================================================= */
+        function initializeSettings() {
+            const settingsBtn = document.getElementById('settings-btn');
+            const modal = document.getElementById('settings-modal');
+            const closeBtn = document.getElementById('close-settings');
+            const closeBtnMain = document.getElementById('close-settings-btn');
+            const resetBtn = document.getElementById('reset-columns');
+
+            settingsBtn.addEventListener('click', () => { modal.classList.remove('hidden'); renderColumnSettings(); renderColorSettings(); });
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            closeBtnMain.addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+            resetBtn.addEventListener('click', () => {
+                columnConfig = JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+                saveColumnConfig();
+                chartColors = { ...DEFAULT_COLORS };
+                saveColorConfig();
+                renderColumnSettings();
+                renderColorSettings();
+                renderTableDOM();
+            });
+        }
+
+        function renderColumnSettings() {
+            const columnList = document.getElementById('column-list');
+            columnList.innerHTML = '';
+            columnConfig.forEach((col, index) => {
+                const div = document.createElement('div');
+                div.className = 'draggable-item flex items-center gap-3 p-3 bg-slate-900 border border-slate-700 rounded-lg hover:border-slate-600 transition-colors';
+                div.draggable = true;
+                div.dataset.index = index;
+                div.innerHTML = `
+                    <span class="text-slate-500 cursor-grab active:cursor-grabbing">⋮⋮</span>
+                    <label class="flex items-center gap-2 flex-1 cursor-pointer">
+                        <input type="checkbox" class="column-toggle w-4 h-4 rounded border-slate-600" ${col.visible ? 'checked' : ''} data-id="${col.id}">
+                        <span class="text-sm text-slate-200">${col.label}</span>
+                    </label>`;
+                div.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; div.classList.add('dragging'); });
+                div.addEventListener('dragend', () => div.classList.remove('dragging'));
+                div.addEventListener('dragover', (e) => e.preventDefault());
+                div.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const srcDiv = document.querySelector('.draggable-item.dragging');
+                    if (srcDiv && srcDiv !== div) {
+                        const s = parseInt(srcDiv.dataset.index), t = parseInt(div.dataset.index);
+                        [columnConfig[s], columnConfig[t]] = [columnConfig[t], columnConfig[s]];
+                        saveColumnConfig(); renderColumnSettings(); renderTableDOM();
+                    }
+                });
+                columnList.appendChild(div);
+            });
+            document.querySelectorAll('.column-toggle').forEach(toggle => {
+                toggle.addEventListener('change', (e) => {
+                    const col = columnConfig.find(c => c.id === e.target.dataset.id);
+                    if (col) { col.visible = e.target.checked; saveColumnConfig(); renderTableDOM(); }
+                });
+            });
+        }
+
+        /* =========================================================
+           SORT BUTTONS
+        ========================================================= */
+        function initializeSortButtons() {
+            ['sort-by-oi','sort-by-price','sort-by-funding'].forEach(id => {
+                const type = id.replace('sort-by-','');
+                document.getElementById(id).addEventListener('click', () => {
+                    if (currentSortType === type) sortAscending = !sortAscending;
+                    else { currentSortType = type; sortAscending = false; }
+                    updateSortButtonStates(); renderTableDOM();
+                });
+            });
+        }
+        function updateSortButtonStates() {
+            ['oi','price','funding'].forEach(t => {
+                const btn = document.getElementById(`sort-by-${t}`);
+                btn.classList.remove('active');
+                const icons = {oi:'📊', price:'📈', funding:'💰'};
+                btn.textContent = `${icons[t]} Sort by ${t.charAt(0).toUpperCase()+t.slice(1)}`;
+            });
+            if (currentSortType) {
+                const btn = document.getElementById(`sort-by-${currentSortType}`);
+                btn.classList.add('active');
+                const icons = {oi:'📊', price:'📈', funding:'💰'};
+                btn.textContent = `${icons[currentSortType]} Sort by ${currentSortType.charAt(0).toUpperCase()+currentSortType.slice(1)} ${sortAscending?'↑':'↓'}`;
+            }
+        }
+
+        /* =========================================================
+           TABLE HEADERS
+        ========================================================= */
+        function renderTableHeaders() {
+            const thead = document.getElementById('table-header');
+            thead.innerHTML = '';
+            const tr = document.createElement('tr');
+            columnConfig.filter(c => c.visible).forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'px-6 py-4 text-center font-semibold text-slate-300';
+                th.textContent = col.label;
+                tr.appendChild(th);
+            });
+            thead.appendChild(tr);
+        }
+
+        /* =========================================================
+           FORMATTER
+        ========================================================= */
+        const formatNumber = (num) => new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 2 }).format(num);
+        function oiFormatNumber(num, dec = 2) {
+            if (num >= 1e9) return (num/1e9).toFixed(dec) + 'B';
+            if (num >= 1e6) return (num/1e6).toFixed(dec) + 'M';
+            if (num >= 1e3) return (num/1e3).toFixed(dec) + 'K';
+            return num.toFixed(dec);
+        }
+
+        /* =========================================================
+           SEARCH
+        ========================================================= */
+        document.getElementById('search-input').addEventListener('input', renderTableDOM);
+        async function searchCryptoBinance(symbol) {
+            try {
+                const res = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${symbol.toUpperCase()}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch { return null; }
+        }
+
+        /* =========================================================
+           OI MINI CHART — Yellow histogram + notional line
+        ========================================================= */
+        function drawOiMiniChart(canvasId, oiContractData, oiNotionalData, barColor, lineColor) {
+            if (!oiContractData || oiContractData.length < 2) return;
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = 2;
+            const W = canvas.width = canvas.offsetWidth * dpr;
+            const H = canvas.height = canvas.offsetHeight * dpr;
+            ctx.clearRect(0, 0, W, H);
+
+            const n = oiContractData.length;
+            const padX = 2 * dpr;
+            const padTop = 3 * dpr;
+            const padBot = 2 * dpr;
+            const chartW = W - padX * 2;
+            const chartH = H - padTop - padBot;
+            const barGap = 1.5 * dpr;
+            const barW = Math.max((chartW - barGap * (n - 1)) / n, 1.5 * dpr);
+
+            const minC = Math.min(...oiContractData);
+            const maxC = Math.max(...oiContractData);
+            const cRange = maxC - minC || 1;
+
+            // --- 1) Yellow histogram bars for OI contracts ---
+            for (let i = 0; i < n; i++) {
+                const x = padX + i * (barW + barGap);
+                const h = ((oiContractData[i] - minC) / cRange) * chartH * 0.85 + chartH * 0.15;
+                const y = H - padBot - h;
+                ctx.fillStyle = hexToRgba(barColor, 0.4);
+                ctx.fillRect(x, y, barW, h);
+                ctx.strokeStyle = hexToRgba(barColor, 0.75);
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, barW, h);
+            }
+
+            // --- 2) Notional value overlay line (USD) ---
+            if (oiNotionalData && oiNotionalData.length >= 2) {
+                const minN = Math.min(...oiNotionalData);
+                const maxN = Math.max(...oiNotionalData);
+                const nRange = maxN - minN || 1;
+
+                ctx.beginPath();
+                for (let i = 0; i < n; i++) {
+                    const x = padX + i * (barW + barGap) + barW / 2;
+                    const y = H - padBot - ((oiNotionalData[i] - minN) / nRange) * chartH * 0.85 - chartH * 0.15;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = lineColor;
+                ctx.lineWidth = 1.5 * dpr;
+                ctx.setLineDash([4 * dpr, 3 * dpr]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        /* =========================================================
+           VOLUME MINI CHART — dynamic green/red bars + average line
+        ========================================================= */
+        function drawVolMiniChart(canvasId, volData, avgData, volColors, avgColor) {
+            if (!volData || volData.length < 2) return;
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = 2;
+            const W = canvas.width = canvas.offsetWidth * dpr;
+            const H = canvas.height = canvas.offsetHeight * dpr;
+            ctx.clearRect(0, 0, W, H);
+
+            const n = volData.length;
+            const padX = 2 * dpr;
+            const padTop = 3 * dpr;
+            const padBot = 2 * dpr;
+            const chartW = W - padX * 2;
+            const chartH = H - padTop - padBot;
+            const barGap = 1.5 * dpr;
+            const barW = Math.max((chartW - barGap * (n - 1)) / n, 1.5 * dpr);
+
+            const maxV = Math.max(...volData);
+            const minV = Math.min(...volData);
+            const range = maxV - minV || 1;
+
+            // --- Green/Red histogram bars based on candle direction ---
+            for (let i = 0; i < n; i++) {
+                const x = padX + i * (barW + barGap);
+                const h = ((volData[i] - minV) / range) * chartH * 0.85 + chartH * 0.15;
+                const y = H - padBot - h;
+                const isGreen = volColors ? volColors[i] : true;
+                const barColor = isGreen ? chartColors.volGreen : chartColors.volRed;
+                ctx.fillStyle = hexToRgba(barColor, 0.5);
+                ctx.fillRect(x, y, barW, h);
+                ctx.strokeStyle = hexToRgba(barColor, 0.85);
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, barW, h);
+            }
+
+            // --- Dashed average line ---
+            if (avgData && avgData.length >= 2) {
+                ctx.beginPath();
+                for (let i = 0; i < n; i++) {
+                    const x = padX + i * (barW + barGap) + barW / 2;
+                    const y = H - padBot - ((avgData[i] - minV) / range) * chartH * 0.85 - chartH * 0.15;
+                    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = avgColor;
+                ctx.lineWidth = 2 * dpr;
+                ctx.setLineDash([6 * dpr, 4 * dpr]);
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        /* =========================================================
+           FETCH CRYPTO DETAILS (OI + Volume history from Binance)
+        ========================================================= */
+        async function fetchCryptoDetails(ticker, index) {
+            const symbol = ticker.symbol;
+            try {
+                const miniTf = miniChartTimeframe;
+                const klineInterval = miniTfToKlineInterval(miniTf);
+
+                const [premiumIndexRes, oiLiveRes, oiHistRes, klineRes] = await Promise.all([
+                    fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`),
+                    fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`),
+                    fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=${miniTf}&limit=24`).catch(() => null),
+                    fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${klineInterval}&limit=24`).catch(() => null)
+                ]);
+
+                const premiumData = await premiumIndexRes.json();
+                const oiLiveData = await oiLiveRes.json();
+                let oiHistData = oiHistRes ? await oiHistRes.json() : [];
+                let klineData = klineRes ? await klineRes.json() : [];
+
+                const currentPrice = parseFloat(ticker.lastPrice);
+                const changePercent = parseFloat(ticker.priceChangePercent);
+                const fundingRate = parseFloat(premiumData.lastFundingRate) * 100;
+                const currentOIContracts = parseFloat(oiLiveData.openInterest);
+                const currentOiUSDT = currentOIContracts * currentPrice;
+                const volumeUSDT = parseFloat(ticker.quoteVolume);
+
+                let historicalPriceBaseline = currentPrice;
+                let historicalOiBaseline = currentOiUSDT;
+
+                try {
+                    const [histOiRes2, klineRes2] = await Promise.all([
+                        fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=4h&limit=6`),
+                        fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=2`)
+                    ]);
+                    const histOiData2 = await histOiRes2.json();
+                    const klineData2 = await klineRes2.json();
+                    if (klineData2 && klineData2.length > 0) historicalPriceBaseline = parseFloat(klineData2[0][1]);
+                    if (histOiData2 && histOiData2.length > 0) {
+                        historicalOiBaseline = parseFloat(histOiData2[0].sumOpenInterestValue || (parseFloat(histOiData2[0].sumOpenInterest) * historicalPriceBaseline));
+                    }
+                } catch { /* skip */ }
+
+                const pctPriceChange = ((currentPrice - historicalPriceBaseline) / historicalPriceBaseline) * 100;
+                const pctOiChange = ((currentOiUSDT - historicalOiBaseline) / historicalOiBaseline) * 100;
+
+                // OI mini chart data (API returns chronological order — keep as-is)
+                let miniOIAmount = [], miniOINotional = [];
+                if (Array.isArray(oiHistData) && oiHistData.length > 1) {
+                    miniOIAmount = oiHistData.map(d => parseFloat(d.sumOpenInterest));
+                    miniOINotional = oiHistData.map(d => parseFloat(d.sumOpenInterestValue));
+                }
+
+                // Volume mini chart data from klines (k[1]=open, k[4]=close, k[7]=quote vol)
+                let miniVolData = [], miniVolAvg = [], miniVolColors = [];
+                if (Array.isArray(klineData) && klineData.length > 1) {
+                    const quoteVols = klineData.map(k => parseFloat(k[7])); // USDT volume
+                    miniVolData = quoteVols;
+                    const avg = quoteVols.reduce((a,b)=>a+b,0) / quoteVols.length;
+                    miniVolAvg = quoteVols.map(() => avg); // flat average line
+                    // Green if close >= open (bullish), Red if close < open (bearish)
+                    miniVolColors = klineData.map(k => parseFloat(k[4]) >= parseFloat(k[1]));
+                }
+
+                return {
+                    rank: index + 1, symbol, currentPrice, changePercent, fundingRate,
+                    fundingSessionText: '8h', oiInUSDT: currentOiUSDT,
+                    oiTrendIndicator: pctOiChange > 0.05 ? '<span class="text-emerald-400 font-bold ml-1 text-xs">▲</span>' : pctOiChange < -0.05 ? '<span class="text-rose-500 font-bold ml-1 text-xs">▼</span>' : '',
+                    priceTrendIndicator: pctPriceChange > 0.05 ? '<span class="text-emerald-400 font-bold ml-1 text-xs">▲</span>' : pctPriceChange < -0.05 ? '<span class="text-rose-500 font-bold ml-1 text-xs">▼</span>' : '',
+                    volumeUSDT, pctOiChange,
+                    miniOIAmount, miniOINotional,
+                    miniVolData, miniVolAvg, miniVolColors
+                };
+            } catch (err) {
+                console.error(`Error processing ${symbol}:`, err);
+                return null;
+            }
+        }
+
+        /* =========================================================
+           OI DETAIL MODAL
+        ========================================================= */
+        let oiDetailChart = null;
+        let oiModalSymbol = 'BTCUSDT';
+        let oiModalPeriod = '1h';
+        let panModeActive = false;
+
+        function openOiModal(symbol) {
+            oiModalSymbol = symbol;
+            oiModalPeriod = '1h';
+            panModeActive = false;
+            const panBtn = document.getElementById('zoom-pan-btn');
+            if (panBtn) panBtn.classList.remove('active');
+            document.getElementById('oi-detail-modal').classList.add('show');
+            document.getElementById('oi-modal-title').textContent = `${symbol} — Open Interest & Notional Value`;
+            document.querySelectorAll('.oi-tf-btn').forEach(b => b.classList.toggle('active', b.dataset.tf === '1h'));
+            loadOiDetailChart();
+        }
+        function closeOiModal() {
+            document.getElementById('oi-detail-modal').classList.remove('show');
+        }
+
+        async function loadOiDetailChart() {
+            const loadingEl = document.getElementById('oi-chart-loading');
+            loadingEl.style.display = 'block';
+            loadingEl.textContent = `Loading ${oiModalSymbol} OI data...`;
+            const url = `https://fapi.binance.com/futures/data/openInterestHist?symbol=${oiModalSymbol}&period=${oiModalPeriod}&limit=150`;
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const rawData = await res.json();
+                if (!Array.isArray(rawData) || rawData.length === 0) throw new Error('No data');
+                const sorted = rawData; // API returns chronological — no reverse needed
+                const labels = sorted.map(d => {
+                    const dt = new Date(parseInt(d.timestamp));
+                    return oiModalPeriod.includes('d') ? dt.toLocaleDateString() : dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                });
+                const oiAmount = sorted.map(d => parseFloat(d.sumOpenInterest));
+                const oiNotional = sorted.map(d => parseFloat(d.sumOpenInterestValue));
+                const latest = sorted[sorted.length - 1];
+                const avgOI = oiAmount.reduce((a,b)=>a+b,0) / oiAmount.length;
+                const maxOI = Math.max(...oiAmount);
+                document.getElementById('oi-s-symbol').textContent = oiModalSymbol;
+                document.getElementById('oi-s-current-oi').textContent = oiFormatNumber(parseFloat(latest.sumOpenInterest));
+                document.getElementById('oi-s-notional').textContent = '$' + oiFormatNumber(parseFloat(latest.sumOpenInterestValue), 1);
+                document.getElementById('oi-s-avg-oi').textContent = oiFormatNumber(avgOI);
+                document.getElementById('oi-s-max-oi').textContent = oiFormatNumber(maxOI);
+                renderOiDetailChart(labels, oiAmount, oiNotional);
+                loadingEl.style.display = 'none';
+            } catch (err) {
+                loadingEl.innerHTML = `<span style="color:#ef5350;">⚠️ ${err.message}</span><br><span style="font-size:11px;color:#848e9c;">Check symbol or try another timeframe.</span>`;
+            }
+        }
+
+        function renderOiDetailChart(labels, oiAmount, oiNotional) {
+            const ctx = document.getElementById('oiDetailChart').getContext('2d');
+            if (oiDetailChart) oiDetailChart.destroy();
+
+            oiDetailChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { type:'bar', label:'OI (Contracts)', data:oiAmount,
+                          backgroundColor: hexToRgba(chartColors.oiArea, 0.4), borderColor: hexToRgba(chartColors.oiArea, 0.8),
+                          borderWidth:1, yAxisID:'yOI', barPercentage:0.8, borderRadius:2 },
+                        { type:'line', label:'Notional Value (USD)', data:oiNotional,
+                          borderColor: chartColors.oiLine, backgroundColor: 'transparent',
+                          borderWidth:2, pointRadius:1, pointHoverRadius:4,
+                          pointBackgroundColor: chartColors.oiLine, pointBorderColor: chartColors.oiLine,
+                          yAxisID:'yNotional', tension:0.3, fill:false, borderDash:[5,3] }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode:'index', intersect:false },
+                    scales: {
+                        x: { grid:{color:'rgba(43,49,57,0.3)',drawBorder:false}, ticks:{color:'#848e9c',maxTicksLimit:12,font:{size:11}} },
+                        yOI: { type:'linear',position:'left', title:{display:true,text:'OI (Contracts)',color:chartColors.oiArea,font:{weight:'bold',size:12}},
+                               grid:{color:'rgba(43,49,57,0.3)'}, ticks:{color:'#848e9c',callback:v=>oiFormatNumber(v,0),font:{size:11}} },
+                        yNotional: { type:'linear',position:'right', title:{display:true,text:'Notional Value (USD)',color:chartColors.oiLine,font:{weight:'bold',size:12}},
+                                     grid:{drawOnChartArea:false}, ticks:{color:'#848e9c',callback:v=>'$'+oiFormatNumber(v,0),font:{size:11}} }
+                    },
+                    plugins: {
+                        legend: { labels:{color:'#eaecef',font:{size:12,weight:'500'},padding:14,usePointStyle:true} },
+                        tooltip: { backgroundColor:'rgba(15,23,42,0.95)',borderColor:'#334155',borderWidth:1,padding:12,
+                                   titleColor:chartColors.oiArea,bodyColor:'#eaecef',
+                                   callbacks:{ label:function(ctx){ let l=ctx.dataset.label||''; if(l)l+=': ';
+                                       l += ctx.datasetIndex===0 ? oiFormatNumber(ctx.raw,2) : '$'+parseFloat(ctx.raw).toLocaleString(undefined,{maximumFractionDigits:0}); return l; }}},
+                        zoom: { pan:{enabled:true,mode:'xy',modifierKey:'shift'},
+                                 zoom:{wheel:{enabled:true,speed:0.05},pinch:{enabled:true},mode:'xy',drag:{enabled:false}},
+                                 limits:{x:{minRange:3},y:{minRange:1}} }
+                    }
+                }
+            });
+        }
+
+        /* ZOOM TOOLBAR */
+        document.getElementById('zoom-in-btn').addEventListener('click', () => { if(oiDetailChart) oiDetailChart.zoom(1.2); });
+        document.getElementById('zoom-out-btn').addEventListener('click', () => { if(oiDetailChart) oiDetailChart.zoom(0.8); });
+        document.getElementById('zoom-reset-btn').addEventListener('click', () => { if(oiDetailChart) oiDetailChart.resetZoom(); });
+        document.getElementById('zoom-pan-btn').addEventListener('click', function() {
+            if (!oiDetailChart) return;
+            panModeActive = !panModeActive;
+            this.classList.toggle('active', panModeActive);
+            oiDetailChart.options.plugins.zoom.pan.enabled = panModeActive;
+            if (panModeActive) { oiDetailChart.options.plugins.zoom.zoom.wheel.enabled = false; oiDetailChart.options.plugins.zoom.pan.modifierKey = null; }
+            else { oiDetailChart.options.plugins.zoom.zoom.wheel.enabled = true; oiDetailChart.options.plugins.zoom.pan.modifierKey = 'shift'; }
+            oiDetailChart.update('none');
+        });
+        document.getElementById('zoom-y-fit').addEventListener('click', () => {
+            if (!oiDetailChart) return;
+            oiDetailChart.options.scales.yOI.min = undefined; oiDetailChart.options.scales.yOI.max = undefined;
+            oiDetailChart.options.scales.yNotional.min = undefined; oiDetailChart.options.scales.yNotional.max = undefined;
+            oiDetailChart.update('none');
+        });
+
+        document.getElementById('close-oi-modal').addEventListener('click', closeOiModal);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOiModal(); });
+        document.querySelectorAll('.oi-tf-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                oiModalPeriod = btn.dataset.tf;
+                document.querySelectorAll('.oi-tf-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadOiDetailChart();
+            });
+        });
+
+        /* =========================================================
+           MACRO METRICS
+        ========================================================= */
+        function calculateMacroMetrics(data) {
+            if (!data.length) return;
+            const totalOi = data.reduce((a, c) => a + c.oiInUSDT, 0);
+            document.getElementById('macro-oi').innerText = `$${formatNumber(totalOi)}`;
+            const avgFunding = data.reduce((a, c) => a + c.fundingRate, 0) / data.length;
+            const fCard = document.getElementById('macro-funding');
+            fCard.innerText = `${avgFunding.toFixed(4)}%`;
+            fCard.className = `text-2xl font-bold mt-2 ${avgFunding > 0 ? 'text-rose-400' : 'text-emerald-400'}`;
+        }
+
+        /* =========================================================
+           SORT LOGIC
+        ========================================================= */
+        function sortData(data) {
+            if (!currentSortType) return data;
+            const sorted = [...data];
+            sorted.sort((a, b) => {
+                let c = 0;
+                if (currentSortType === 'oi') c = a.pctOiChange - b.pctOiChange;
+                else if (currentSortType === 'price') c = a.changePercent - b.changePercent;
+                else if (currentSortType === 'funding') c = a.fundingRate - b.fundingRate;
+                return sortAscending ? c : -c;
+            });
+            return sorted;
+        }
+
+        /* =========================================================
+           RENDER TABLE
+        ========================================================= */
+        let sparklineRenderQueued = false;
+
+        async function renderTableDOM() {
+            renderTableHeaders();
+            const tbody = document.getElementById('crypto-table-body');
+            const searchQuery = document.getElementById('search-input').value.trim().toUpperCase();
+            let displayData = currentRowsData;
+
+            if (searchQuery) {
+                displayData = currentRowsData.filter(item => item.symbol.includes(searchQuery));
+                if (displayData.length === 0) {
+                    const ticker = await searchCryptoBinance(searchQuery + 'USDT');
+                    if (ticker) { const details = await fetchCryptoDetails(ticker, 1); if (details) displayData = [details]; }
+                }
+            }
+            displayData = sortData(displayData);
+
+            if (!displayData.length) {
+                tbody.innerHTML = '<tr><td class="px-6 py-8 text-center text-slate-500 font-mono text-xs">No active pairs match criteria</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            displayData.forEach((data) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/30 transition-colors';
+
+                let rankBadge = `<span class="font-bold text-slate-500 font-mono">${data.rank}</span>`;
+                if (data.rank === 1) rankBadge = '<span class="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-xs shadow">🥇 1</span>';
+                if (data.rank === 2) rankBadge = '<span class="px-2 py-0.5 rounded bg-slate-300 text-slate-950 font-black text-xs shadow">🥈 2</span>';
+                if (data.rank === 3) rankBadge = '<span class="px-2 py-0.5 rounded bg-amber-700 text-white font-black text-xs shadow">🥉 3</span>';
+
+                const visibleColumns = columnConfig.filter(col => col.visible);
+                visibleColumns.forEach(col => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 text-center';
+
+                    switch (col.id) {
+                        case 'rank':
+                            td.innerHTML = rankBadge; break;
+                        case 'symbol':
+                            td.className = 'px-6 py-4 font-bold text-slate-100 tracking-wide text-left';
+                            td.textContent = data.symbol; break;
+                        case 'price':
+                            td.className = 'px-6 py-4 text-left';
+                            td.innerHTML = `<div class="font-mono text-slate-200 flex items-center">$${data.currentPrice.toLocaleString(undefined,{minimumFractionDigits:2})} ${data.priceTrendIndicator}</div>
+                                <div class="text-xs ${data.changePercent>=0?'text-emerald-400':'text-rose-400'} font-bold tracking-tight">${data.changePercent>=0?'▲':'▼'} ${data.changePercent>=0?'+':''}${data.changePercent.toFixed(2)}%</div>`;
+                            break;
+                        case 'funding':
+                            td.className = `px-6 py-4 font-mono font-semibold ${data.fundingRate>0?'text-rose-400':'text-emerald-400'}`;
+                            td.textContent = `${data.fundingRate>0?'+':''}${data.fundingRate.toFixed(4)}%`; break;
+                        case 'session':
+                            td.className = 'px-6 py-4 text-slate-400 font-mono text-xs';
+                            td.textContent = data.fundingSessionText; break;
+                        case 'oi':
+                            td.className = 'px-6 py-4 font-mono text-slate-200';
+                            td.innerHTML = `<div class="flex items-center justify-center flex-col">$${formatNumber(data.oiInUSDT)} ${data.oiTrendIndicator}<div class="text-xs ${data.pctOiChange>=0?'text-emerald-400':'text-rose-400'} mt-1">${data.pctOiChange>=0?'+':''}${data.pctOiChange.toFixed(2)}%</div></div>`;
+                            break;
+                        case 'oi_sparkline': {
+                            const cid = `spark-oi-${data.symbol}`;
+                            td.className = 'px-6 py-4 text-center';
+                            td.innerHTML = `<div class="mini-chart-wrap inline-block" title="Click for OI detail"><canvas id="${cid}" style="width:130px;height:36px;display:block;"></canvas></div>`;
+                            td.querySelector('.mini-chart-wrap').addEventListener('click', () => openOiModal(data.symbol));
+                            break;
+                        }
+                        case 'vol_sparkline': {
+                            const cid = `spark-vol-${data.symbol}`;
+                            td.className = 'px-6 py-4 text-center';
+                            td.innerHTML = `<div class="mini-chart-wrap inline-block" title="Volume histogram + Avg line"><canvas id="${cid}" style="width:130px;height:36px;display:block;"></canvas></div>`;
+                            break;
+                        }
+                        case 'volume':
+                            td.className = 'px-6 py-4 font-mono text-slate-400';
+                            td.textContent = `$${formatNumber(data.volumeUSDT)}`; break;
+                    }
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            // Draw mini charts
+            if (!sparklineRenderQueued) {
+                sparklineRenderQueued = true;
+                requestAnimationFrame(() => {
+                    displayData.forEach(data => {
+                        if (data.miniOIAmount && data.miniOIAmount.length >= 2) {
+                            drawOiMiniChart(`spark-oi-${data.symbol}`, data.miniOIAmount, data.miniOINotional, chartColors.oiArea, chartColors.oiLine);
+                        }
+                        if (data.miniVolData && data.miniVolData.length >= 2) {
+                            drawVolMiniChart(`spark-vol-${data.symbol}`, data.miniVolData, data.miniVolAvg, data.miniVolColors, chartColors.volAvgLine);
+                        }
+                    });
+                    sparklineRenderQueued = false;
+                });
+            }
+        }
+
+        /* =========================================================
+           MAIN ENGINE
+        ========================================================= */
+        async function updateTerminalEngine() {
+            const status = document.getElementById('status-indicator');
+            const pulse = document.getElementById('status-pulse');
+            status.innerText = "Extracting Top-40 Gainers (24H)...";
+            pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-yellow-500";
+            try {
+                const globalTickerRes = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr');
+                const allTickers = await globalTickerRes.json();
+                const topGainers = allTickers
+                    .filter(t => t.symbol.endsWith('USDT') && !t.symbol.includes('_'))
+                    .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent))
+                    .slice(0, 40);
+                const detailedDataPromises = topGainers.map((ticker, index) => fetchCryptoDetails(ticker, index));
+                currentRowsData = (await Promise.all(detailedDataPromises)).filter(r => r !== null);
+                allCryptoCache = [...currentRowsData];
+                calculateMacroMetrics(currentRowsData);
+                renderTableDOM();
+                status.innerText = "Macro Feed Active";
+                pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+                document.getElementById('last-updated').innerText = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Error:', error);
+                status.innerText = "Archive Sync Error";
+                pulse.className = "relative inline-flex rounded-full h-2 w-2 bg-rose-500";
+            }
+        }
+
+        /* =========================================================
+           INIT
+        ========================================================= */
+        initializeSettings();
+        initializeSortButtons();
+        initMiniTfSelector();
+        updateTerminalEngine();
+        setInterval(updateTerminalEngine, REFRESH_INTERVAL_MS);
+    </script>
+</body>
+</html>
